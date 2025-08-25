@@ -1,0 +1,50 @@
+{
+  "tools": [
+    {
+      "name": "list_directory",
+      "description": "Get a list of all files and folders in a specified directory",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "directory_path": {
+            "type": "string",
+            "description": "The path to the directory to list contents from"
+          }
+        },
+        "required": ["directory_path"]
+      }
+    },
+    {
+      "name": "read_file_content",
+      "description": "Read and return the contents of a specified file",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "The path to the file to read"
+          }
+        },
+        "required": ["file_path"]
+      }
+    },
+    {
+      "name": "search_in_directory",
+      "description": "Search for text within all files in a specified directory recursively",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "directory_path": {
+            "type": "string",
+            "description": "The path to the directory to search in"
+          },
+          "search_query": {
+            "type": "string",
+            "description": "The text to search for within the files"
+          }
+        },
+        "required": ["directory_path", "search_query"]
+      }
+    }
+  ]
+}
