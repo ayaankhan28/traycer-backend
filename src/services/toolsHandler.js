@@ -1,6 +1,8 @@
 const { Anthropic } = require('@anthropic-ai/sdk');
 const toolsConfig = require('../config/tools.json');
 const { listDirectory, readFileContent } = require('../utils/fileTools');
+const { createScratchPad, scratchPadReadAll, scratchPadUpdate, scratchPadOverwrite } = require('../utils/scratchPadTools');
+const { deepThinking } = require('../utils/deepThinkingTools');
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
@@ -11,7 +13,12 @@ const anthropic = new Anthropic({
  */
 const toolImplementations = {
   list_directory: listDirectory,
-  read_file_content: readFileContent
+  read_file_content: readFileContent,
+  create_scratch_pad: createScratchPad,
+  scratch_pad_read_all: scratchPadReadAll,
+  scratch_pad_update: scratchPadUpdate,
+  scratch_pad_overwrite: scratchPadOverwrite,
+  deep_thinking: deepThinking
 };
 
 /**
@@ -25,7 +32,21 @@ async function executeTool(toolName, parameters) {
   if (!implementation) {
     throw new Error(`Tool ${toolName} not implemented`);
   }
-  return implementation(parameters);
+  
+  // Handle different tool parameter structures
+  if (toolName === 'scratch_pad_update') {
+    return implementation(parameters.id, parameters.updates);
+  } else if (toolName === 'scratch_pad_overwrite') {
+    return implementation(parameters.new_data);
+  } else if (toolName === 'deep_thinking') {
+    return implementation(parameters.user_query, parameters.chat_history);
+  } else if (toolName === 'create_scratch_pad' || toolName === 'scratch_pad_read_all') {
+    // These tools don't require any arguments
+    return implementation();
+  } else {
+    // For other tools, use the first parameter value
+    return implementation(parameters[Object.keys(parameters)[0]]);
+  }
 }
 
 /**

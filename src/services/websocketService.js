@@ -6,6 +6,8 @@ let wss = null;
 // Message types enum
 const MessageTypes = {
   CHAT: 'chat',
+  THINKING: 'thinking',
+  DEEP_THINKING: 'deep_thinking',
   NOTIFICATION: 'notification',
   STATUS: 'status',
   ERROR: 'error'

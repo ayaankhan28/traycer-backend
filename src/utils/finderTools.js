@@ -19,7 +19,7 @@ async function searchInFile(filePath, searchString) {
       let lineNum = 0;
       rl.on("line", (line) => {
         lineNum++;
-        if (line.includes(searchString)) {
+        if (line.toLowerCase().includes(searchString)) {
           results.push([lineNum, line.trim()]);
         }
       });
@@ -40,6 +40,8 @@ async function searchInFile(filePath, searchString) {
  */
 async function grepLikeSearch(rootFolder, searchString) {
   const matches = {};
+  // Convert search string to lowercase for case-insensitive comparison
+  const searchStringLower = searchString.toLowerCase();
 
   async function walk(dir) {
     try {
@@ -64,7 +66,8 @@ async function grepLikeSearch(rootFolder, searchString) {
           const textExtensions = ['.js', '.ts', '.jsx', '.tsx', '.json', '.md', '.txt', '.py', '.html', '.css', '.scss', '.sql'];
           
           if (textExtensions.includes(ext) || ext === '') {
-            const result = await searchInFile(fullPath, searchString);
+            // Pass both original and lowercase search strings to handle case-insensitive search
+            const result = await searchInFile(fullPath, searchStringLower);
             if (result.length > 0) {
               matches[fullPath] = result;
             }

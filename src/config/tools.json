@@ -45,6 +45,74 @@
         },
         "required": ["directory_path", "search_query"]
       }
+    },
+    {
+      "name": "create_scratch_pad",
+      "description": "Create a scratch pad file if it doesn't exist",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "scratch_pad_read_all",
+      "description": "Read and return the complete JSON data stored in the scratch pad",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "scratch_pad_update",
+      "description": "Update a single entry in the scratch pad JSON by specifying its ID",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The unique identifier of the entry to update"
+          },
+          "updates": {
+            "type": "object",
+            "description": "The key-value pairs to update in the entry"
+          }
+        },
+        "required": ["id", "updates"]
+      }
+    },
+    {
+      "name": "scratch_pad_overwrite",
+      "description": "Completely overwrite the scratch pad JSON with a new JSON object when multiple keys need to be updated",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "new_data": {
+            "type": "object",
+            "description": "The complete new JSON object to replace the scratch pad content"
+          }
+        },
+        "required": ["new_data"]
+      }
+    },
+    {
+      "name": "deep_thinking",
+      "description": "Acts as a planning layer that analyzes user queries and chat history to provide strategic reasoning for response planning",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "user_query": {
+            "type": "string",
+            "description": "The current user query that needs a planned response"
+          },
+          "chat_history": {
+            "type": "string",
+            "description": "The previous chat conversation history as context for planning"
+          }
+        },
+        "required": ["user_query", "chat_history"]
+      }
     }
   ]
 }

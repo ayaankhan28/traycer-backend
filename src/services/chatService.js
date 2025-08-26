@@ -2,6 +2,9 @@ const Anthropic = require('@anthropic-ai/sdk');
 const conversationService = require('./conversationService');
 const { listDirectory, readFileContent } = require('../utils/fileTools');
 const { searchInDirectory } = require('../utils/finderTools');
+const { createScratchPad, scratchPadReadAll, scratchPadUpdate, scratchPadOverwrite } = require('../utils/scratchPadTools');
+const { deepThinking } = require('../utils/deepThinkingTools');
+const { sendMessage, MessageTypes } = require('./websocketService');
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // Available tools configuration
@@ -51,6 +54,24 @@ const availableTools = [
       },
       required: ["directory_path", "search_query"]
     }
+  },
+  {
+    name: "deep_thinking",
+    description: "Acts as a planning layer that analyzes user queries and chat history to provide strategic reasoning for response planning",
+    input_schema: {
+      type: "object",
+      properties: {
+        user_query: {
+          type: "string",
+          description: "The current user query that needs a planned response"
+        },
+        chat_history: {
+          type: "string",
+          description: "The previous chat conversation history as context for planning"
+        }
+      },
+      required: ["user_query", "chat_history"]
+    }
   }
 ];
 
@@ -58,7 +79,8 @@ const availableTools = [
 const toolImplementations = {
   list_directory: listDirectory,
   read_file_content: readFileContent,
-  search_in_directory: searchInDirectory
+  search_in_directory: searchInDirectory,
+  deep_thinking: deepThinking
 };
 
 class ChatService {
@@ -74,7 +96,7 @@ class ChatService {
    * @param {object} args - Tool arguments
    * @returns {Promise<any>}
    */
-  async executeTool(toolName, args) {
+  async executeTool(toolName, args, history) {
     const implementation = toolImplementations[toolName];
     if (!implementation) {
       throw new Error(`Tool ${toolName} not implemented`);
@@ -83,10 +105,81 @@ class ChatService {
     // Handle different tool parameter structures
     if (toolName === 'search_in_directory') {
       return implementation(args.directory_path, args.search_query);
+    } else if (toolName === 'deep_thinking') {
+      console.log('Deep thinking tool called with history:', history);
+      return implementation(args.user_query, history);
+    } else if (toolName === 'scratch_pad_update') {
+      return implementation(args.id, args.updates);
+    } else if (toolName === 'scratch_pad_overwrite') {
+      return implementation(args.new_data);
+    } else if (toolName === 'scratch_pad_read_all') {
+      // These tools don't require any arguments
+      return implementation();
     } else {
       // For other tools, use the first argument value
       return implementation(args[Object.keys(args)[0]]);
     }
+  }
+
+  /**
+   * Format conversation history for tools, especially deep thinking
+   * @param {Array} messages - Array of conversation messages
+   * @returns {string} Formatted conversation history
+   */
+  formatConversationHistoryForTool(messages) {
+    let formattedHistory = [];
+    
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+      if (!message || !message.role) continue;
+      
+      const role = message.role;
+      
+      if (role === 'user') {
+        // Handle user messages
+        if (Array.isArray(message.content)) {
+          // Check if this is a tool result message
+          const toolResult = message.content.find(content => content && content.type === 'tool_result');
+          if (toolResult) {
+            try {
+              const toolResultData = JSON.parse(toolResult.content);
+              formattedHistory.push(`[TOOL RESULT] ${JSON.stringify(toolResultData)}`);
+            } catch (e) {
+              formattedHistory.push(`[TOOL RESULT] ${toolResult.content}`);
+            }
+          } else {
+            // Regular user message
+            const textContent = message.content.find(content => content && content.type === 'text');
+            if (textContent && textContent.text) {
+              formattedHistory.push(`[USER] ${textContent.text}`);
+            }
+          }
+        } else if (message.content) {
+          // Simple string content
+          formattedHistory.push(`[USER] ${message.content}`);
+        }
+      } else if (role === 'assistant') {
+        // Handle assistant messages
+        if (Array.isArray(message.content)) {
+          // Check for tool use
+          const toolUse = message.content.find(content => content && content.type === 'tool_use');
+          if (toolUse) {
+            formattedHistory.push(`[AI TOOL USE] ${toolUse.name}: ${JSON.stringify(toolUse.input)}`);
+          } else {
+            // Regular AI response
+            const textContent = message.content.find(content => content && content.type === 'text');
+            if (textContent && textContent.text) {
+              formattedHistory.push(`[AI] ${textContent.text}`);
+            }
+          }
+        } else if (message.content) {
+          // Simple string content
+          formattedHistory.push(`[AI] ${message.content}`);
+        }
+      }
+    }
+    
+    return formattedHistory.join('\n');
   }
 
   /**
@@ -137,12 +230,14 @@ class ChatService {
 
       let attempt = 1;
       while (true) {
+
+
         // Send request to Claude
         const response = await this.anthropic.messages.create({
           model: "claude-3-5-sonnet-20241022",
           max_tokens: 1000,
           messages: messages,
-          system: "You are a helpful assistant that can use tools to search for information. You can use the following tools: " + availableTools.map(tool => tool.name).join(", ")+"Answer all in beautiful structured markdown format",
+          system: "You are a helpful assistant that can help the user in solving and code base editing when prompted with some task you have to create a detailed planned how to exectute and give final crisp plan with order and priority. You can use the following tools: " + availableTools.map(tool => tool.name).join(", ") + ". Answer all in beautiful structured markdown format. IMPORTANT: When mentioning any file names or file paths in your responses, always wrap them with special markers like this: {{filename:path/to/file.ext}} - this helps with proper highlighting in the UI. For example: {{filename:src/components/Button.tsx}} or {{filename:package.json}}. You can use the deep_thinking tool to plan your response when task is big and needs to be divided in smaller task. but use it only when asked to use. gather relevant file and other context frolm the other files tools to gather better context for the better thinking.",
           tools: availableTools
         });
 
@@ -154,9 +249,20 @@ class ChatService {
           if (content.type === "text") {
             finalResponse.push(content.text);
             console.log('Assistant content:', content.text);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            sendMessage({
+              type: MessageTypes.THINKING,
+              content: content.text
+            });
             assistantContent.push({ type: "text", text: content.text });
           } else if (content.type === "tool_use") {
             console.log('Tool use:', content);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            sendMessage({
+              type: MessageTypes.THINKING,
+              content: "🔧 Using tool: " + content.name
+            });
+            
             toolCalls.push(content);
           }
         }
@@ -169,7 +275,18 @@ class ChatService {
         // Process each tool call
         for (const toolCall of toolCalls) {
           try {
-            const result = await this.executeTool(toolCall.name, toolCall.input);
+            // Create structured conversation history for deep thinking tool
+            let conversationHistoryForTool;
+            if (toolCall.name === 'deep_thinking') {
+              // For deep thinking, pass the complete conversation structure
+              conversationHistoryForTool = this.formatConversationHistoryForTool(messages);
+              console.log('Formatted conversation history for deep thinking:', conversationHistoryForTool);
+            } else {
+              // For other tools, keep the existing behavior
+              conversationHistoryForTool = messages.map(m => m.content).join("\n");
+            }
+            
+            const result = await this.executeTool(toolCall.name, toolCall.input, conversationHistoryForTool);
             
             // Add tool results to conversation
             assistantContent.push({
@@ -197,7 +314,13 @@ class ChatService {
         attempt++;
       }
 
-      const finalMessage = finalResponse.join("\n");
+      const finalMessage = finalResponse[finalResponse.length - 1];
+
+      // Send final thinking message
+      sendMessage({
+        type: MessageTypes.THINKING,
+        content: "✅ Response ready!"
+      });
 
       // Store conversation in database
       try {
