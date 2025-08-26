@@ -1,5 +1,7 @@
 # Traycerai Backend
 
+# Give this mock folder path  to make the ai work on it
+\src\mock_fastapi as shown in the video
 A simple Express.js backend with clean architecture featuring services, repositories, and database integration.
 
 ## Features
